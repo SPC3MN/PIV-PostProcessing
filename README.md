@@ -5,11 +5,8 @@ Python pipeline for processing and analyzing stereo/planar PIV data from a Rando
 ## Structure
 
 ```
-decomposition/   Reynolds/triple decomposition of raw PIV snapshots into mean + fluctuating fields
+decomposition/   Reynolds decomposition of raw PIV snapshots into mean + fluctuating fields
 analysis/        Structure functions, autocorrelations, dissipation rate, Lumley anisotropy invariants, Bayesian bootstrap CIs
-plotting/        Figure generation from processed statistics (publication-style formatting)
-jet_control/     Pump on/off control signal generation for pulsed jet forcing (sunbathing algorithm)
-single_jet/      Single-jet velocity field statistics (spreading rate, KE, enstrophy)
 ```
 
 | File | Purpose |
