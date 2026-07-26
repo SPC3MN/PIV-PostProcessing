@@ -5,16 +5,16 @@ Python pipeline for processing and analyzing stereo/planar PIV data from a Rando
 ## Structure
 
 ```
-decomposition/   Reynolds decomposition of raw PIV snapshots into mean + fluctuating fields
-analysis/        Structure functions, autocorrelations, dissipation rate, Lumley anisotropy invariants, Bayesian bootstrap CIs
+decomposition/   Reynolds decomposition of raw PIV snapshots into mean + fluctuating fields, calculation and bootstrapping of mean/RMS velocities, structure functions, autocorrelations, and reynolds stresses
+analysis/  Calculation of dissipation rate, integral length, Lumley anisotropy invariants (stereo), homogeneity/isotropy
 ```
 
 | File | Purpose |
 |---|---|
 | `decomposition/Planar_Decomposition.py` | Reynolds decomposition for 2D planar PIV data |
 | `decomposition/Stereo_Decomposition.py` | Reynolds decomposition for stereo PIV data |
-| `analysis/Planar_Analysis.py` | Post-processing for planar PIV results: mean/RMS velocities, structure functions, dissipation rate, integral length scale|
-| `analysis/Stereo_Analysis.py` | Post-processing for stereo PIV results: mean/RMS velocities, structure functions, dissipation rate, integral length scale, anisotropy invariants |
+| `analysis/Planar_Analysis.py` | Post-processing for planar PIV results: calculation of dissipation rate, integral length, homogeneity/isotropy |
+| `analysis/Stereo_Analysis.py` | Post-processing for stereo PIV results: calculation of dissipation rate, integral length, Lumley anisotropy invariants, homogeneity/isotropy |
 
 ## Setup
 
