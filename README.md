@@ -13,8 +13,8 @@ analysis/  Calculation of dissipation rate, integral length, Lumley anisotropy i
 |---|---|
 | `decomposition/Planar_Decomposition.py` | Reynolds decomposition for 2D planar PIV data |
 | `decomposition/Stereo_Decomposition.py` | Reynolds decomposition for stereo PIV data |
-| `analysis/Planar_Analysis.py` | Post-processing for planar PIV results: calculation of dissipation rate, integral length, homogeneity/isotropy |
-| `analysis/Stereo_Analysis.py` | Post-processing for stereo PIV results: calculation of dissipation rate, integral length, Lumley anisotropy invariants, homogeneity/isotropy |
+| `analysis/Planar_Analysis.py` | Post-processing for planar PIV results: calculation of dissipation rate, integral length, homogeneity/isotropy and the respective CIs |
+| `analysis/Stereo_Analysis.py` | Post-processing for stereo PIV results: calculation of dissipation rate, integral length, Lumley anisotropy invariants, homogeneity/isotropy and the respective CIs |
 
 ## Setup
 
