@@ -23,3 +23,11 @@ pip install -r requirements.txt
 ```
 
 Raw PIV data paths are currently hardcoded (e.g. `/Volumes/PIV Data1/...`) at the top of each script under a `# Control` section — update these to match your local data location before running.
+
+## Input formats
+
+Both `decomposition/Planar_Decomposition.py` and `decomposition/Stereo_Decomposition.py` accept two input formats for `input_dir`, controlled by the `input_format` variable in each script's `# Control` section:
+
+- `'csv'` — per-snapshot DaVis CSV export (`x [mm]`, `y [mm]`, `Velocity u/v[/w] [m/s]` columns), the original format.
+- `'npz'` — per-snapshot `snap_*.npz` files (`X`, `Y`, `U`, `V`[, `W`] arrays), as produced by this pipeline's own `Save_NPZ` step, or by an external GPU-PIV pipeline that writes matching keys. Loading npz skips the CSV parse/pivot step entirely, so re-running a case from a previously exported `npz_dir` is significantly faster than re-parsing the original CSVs.
+- `'auto'` (default) — detects the format from the files present in `input_dir`: uses `'npz'` if the directory contains `.npz` files and no `.csv` files, otherwise `'csv'`.

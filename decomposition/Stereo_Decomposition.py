@@ -20,7 +20,47 @@ def load_single(file, Ny, Nx):
 
     return U[:Ny, :Nx], V[:Ny, :Nx], W[:Ny, :Nx]
 
-def load_dataset(csv_dir, cutoff):
+
+def load_single_npz(file):
+    print(f"\r{os.path.basename(file)}", end = "")
+    with np.load(file) as data:
+        return data['U'], data['V'], data['W']
+
+
+def load_dataset_npz(npz_dir, cutoff):
+    """Load snapshots previously exported by this pipeline's Save_NPZ step
+    (snap_*.npz files holding X, Y, U, V, W)."""
+    npz_files = sorted(
+        f for f in glob.glob(os.path.join(npz_dir, '*.npz')) if not os.path.basename(f).startswith('._'))
+    if cutoff:
+        npz_files = npz_files[:cutoff]
+
+    print(f'Loading {len(npz_files)} Files... ')
+
+    with np.load(npz_files[0]) as data0:
+        X, Y = data0['X'], data0['Y']
+
+    with ThreadPoolExecutor() as ex:
+        results = list(ex.map(load_single_npz, npz_files))
+
+    U_all, V_all, W_all = zip(*results)
+
+    print("\n" + f"Loading done: {round(time.perf_counter() - start, 3)} s" + "\n")
+
+    return X, Y, np.stack(U_all), np.stack(V_all), np.stack(W_all)
+
+
+def load_dataset(csv_dir, cutoff, input_format='auto'):
+
+    if input_format == 'auto':
+        has_npz = bool(glob.glob(os.path.join(csv_dir, '*.npz')))
+        has_csv = bool(glob.glob(os.path.join(csv_dir, '*.csv')))
+        input_format = 'npz' if has_npz and not has_csv else 'csv'
+
+    if input_format == 'npz':
+        return load_dataset_npz(csv_dir, cutoff)
+    elif input_format != 'csv':
+        raise ValueError(f"Unknown input_format: {input_format!r} (use 'csv', 'npz', or 'auto')")
 
     if cutoff:
         csv_files = sorted(
@@ -381,6 +421,7 @@ def Structure_Function(U_fluct, V_fluct):
 # Control
 # --------------------------------------------
 cutoff_idx = False # False if none
+input_format = 'auto'  # 'csv', 'npz' (previously-exported snap_*.npz), or 'auto' to detect from input_dir
 Auto = True
 Structure = True
 Save_Fluct = False
@@ -402,7 +443,7 @@ code_start = time.perf_counter()
 
 # ── Load snapshots ─────────────────────────
 start = time.perf_counter()
-X, Y, U_all, V_all, W_all = load_dataset(input_dir, cutoff=cutoff_idx)
+X, Y, U_all, V_all, W_all = load_dataset(input_dir, cutoff=cutoff_idx, input_format=input_format)
 
 dr = (X[0, 1] - X[0, 0])/10
 
