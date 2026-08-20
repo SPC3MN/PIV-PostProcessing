@@ -26,6 +26,141 @@ def load_single_npz(file):
         return data['U'], data['V']
 
 
+def _lvpyio():
+    try:
+        import lvpyio as lv
+    except ImportError as e:
+        raise ImportError(
+            "lvpyio is required for input_format='vc7' — it ships with the DaVis "
+            "Python Add-Ons (LaVision downloads page), not PyPI. Install it into "
+            "this environment, or use input_format='csv'/'npz' instead."
+        ) from e
+    return lv
+
+
+def _masked_to_nan(arr):
+    if isinstance(arr, np.ma.MaskedArray):
+        return arr.filled(np.nan).astype(np.float32)
+    return np.asarray(arr, dtype=np.float32)
+
+
+def _frame_components(frame):
+    """Extract (X, Y, U, V) from an lvpyio Frame. lvpyio's exact attribute names can
+    vary slightly by version — if this raises against your installed version, inspect
+    `frame.components` / `frame.scales` (or `dir(frame)`) and adjust the lookups here."""
+    comps = frame.components
+    U = _masked_to_nan(comps['U0'])
+    V = _masked_to_nan(comps['V0'])
+
+    scale_x, scale_y = frame.scales.x, frame.scales.y
+    slope_x = getattr(scale_x, 'slope', getattr(scale_x, 'factor', 1.0))
+    offset_x = getattr(scale_x, 'offset', 0.0)
+    slope_y = getattr(scale_y, 'slope', getattr(scale_y, 'factor', 1.0))
+    offset_y = getattr(scale_y, 'offset', 0.0)
+
+    ny, nx = U.shape
+    x_coords = slope_x * np.arange(nx) + offset_x
+    y_coords = slope_y * np.arange(ny) + offset_y
+    X, Y = np.meshgrid(x_coords, y_coords)
+
+    return X, Y, U, V
+
+
+def _resolve_vc7_source(path):
+    """Accepts a DaVis .set file, or a directory containing either a .set file or a
+    flat folder of .vc7 snapshots."""
+    if os.path.isfile(path) and path.lower().endswith('.set'):
+        return 'set', path
+    if os.path.isdir(path):
+        set_files = sorted(
+            f for f in glob.glob(os.path.join(path, '*.set')) if not os.path.basename(f).startswith('._'))
+        if set_files:
+            return 'set', set_files[0]
+        vc7_files = sorted(
+            f for f in glob.glob(os.path.join(path, '*.vc7')) if not os.path.basename(f).startswith('._'))
+        if vc7_files:
+            return 'files', vc7_files
+        raise FileNotFoundError(f"No .set or .vc7 files found in {path}")
+    raise FileNotFoundError(f"{path} is neither a .set file nor a directory")
+
+
+def _vc7_buffers(path, cutoff):
+    lv = _lvpyio()
+    kind, target = _resolve_vc7_source(path)
+    if kind == 'set':
+        s = lv.read_set(target)
+        n = min(len(s), cutoff) if cutoff else len(s)
+        return [s[i] for i in range(n)]
+    files = target[:cutoff] if cutoff else target
+    return [lv.read_buffer(f) for f in files]
+
+
+def load_single_vc7(buffer, top, bottom, left, right):
+    X, Y, U, V = _frame_components(buffer[0])
+    return U[top:bottom, left:right], V[top:bottom, left:right]
+
+
+def load_dataset_vc7(path, cutoff, width_mm, height_mm):
+    """Load snapshots directly from DaVis .set/.vc7 files via lvpyio, skipping the
+    CSV export/parse round trip entirely. Applies the same centered width_mm x
+    height_mm crop as the csv path."""
+    buffers = _vc7_buffers(path, cutoff)
+    print(f'Loading {len(buffers)} Files (lvpyio)... ')
+
+    X_full, Y_full, U0, _ = _frame_components(buffers[0][0])
+    Ny0, Nx0 = U0.shape
+    print(f'Original Size: {(Ny0, Nx0)}')
+
+    x_coords_full = X_full[0]
+    y_coords_full = Y_full[:, 0]
+
+    dx = np.median(np.diff(x_coords_full))
+    dy = np.median(np.diff(y_coords_full))
+    print(f'dx = {dx:.4f} mm, dy = {dy:.4f} mm')
+
+    x_center = (x_coords_full.min() + x_coords_full.max()) / 2
+    y_center = (y_coords_full.min() + y_coords_full.max()) / 2
+    print(f'FOV center: x={x_center:.3f} mm, y={y_center:.3f} mm')
+
+    Nx = int(round(width_mm / abs(dx)))
+    Ny = int(round(height_mm / abs(dy)))
+
+    x_center_idx = np.argmin(np.abs(x_coords_full - x_center))
+    y_center_idx = np.argmin(np.abs(y_coords_full - y_center))
+
+    left = x_center_idx - Nx // 2
+    right = left + Nx
+    top = y_center_idx - Ny // 2
+    bottom = top + Ny
+
+    if left < 0 or top < 0 or right > Nx0 or bottom > Ny0:
+        raise ValueError(
+            f"Requested frame ({width_mm} x {height_mm} mm) exceeds available FOV "
+            f"({Nx0*abs(dx):.1f} x {Ny0*abs(dy):.1f} mm). "
+            f"Computed indices: left={left}, right={right}, top={top}, bottom={bottom}"
+        )
+
+    print(f'Trimmed to: {(Ny, Nx)} points -> {Nx*abs(dx):.2f} x {Ny*abs(dy):.2f} mm, '
+          f'centered at ({x_center:.2f}, {y_center:.2f}) mm')
+
+    X = X_full[top:bottom, left:right]
+    Y = Y_full[top:bottom, left:right]
+
+    with ThreadPoolExecutor() as ex:
+        results = list(ex.map(lambda b: load_single_vc7(b, top, bottom, left, right), buffers))
+
+    results = [
+        r for r in results
+        if all(arr.shape != (0, 0) for arr in r)
+    ]
+
+    U_all, V_all = zip(*results)
+
+    print("\n" + f"Loading done: {round(time.perf_counter() - start, 3)} s" + "\n")
+
+    return X, Y, np.stack(U_all), np.stack(V_all)
+
+
 def load_dataset_npz(npz_dir, cutoff):
     """Load snapshots previously exported by this pipeline's Save_NPZ step
     (snap_*.npz files holding X, Y, U, V). Already-trimmed to width_mm/
@@ -53,14 +188,25 @@ def load_dataset_npz(npz_dir, cutoff):
 def load_dataset(csv_dir, cutoff, width_mm, height_mm, input_format='auto'):
 
     if input_format == 'auto':
-        has_npz = bool(glob.glob(os.path.join(csv_dir, '*.npz')))
-        has_csv = bool(glob.glob(os.path.join(csv_dir, '*.csv')))
-        input_format = 'npz' if has_npz and not has_csv else 'csv'
+        if os.path.isfile(csv_dir) and csv_dir.lower().endswith('.set'):
+            input_format = 'vc7'
+        else:
+            has_npz = bool(glob.glob(os.path.join(csv_dir, '*.npz')))
+            has_csv = bool(glob.glob(os.path.join(csv_dir, '*.csv')))
+            has_vc7 = bool(glob.glob(os.path.join(csv_dir, '*.set'))) or bool(glob.glob(os.path.join(csv_dir, '*.vc7')))
+            if has_vc7 and not has_csv and not has_npz:
+                input_format = 'vc7'
+            elif has_npz and not has_csv:
+                input_format = 'npz'
+            else:
+                input_format = 'csv'
 
     if input_format == 'npz':
         return load_dataset_npz(csv_dir, cutoff)
+    elif input_format == 'vc7':
+        return load_dataset_vc7(csv_dir, cutoff, width_mm, height_mm)
     elif input_format != 'csv':
-        raise ValueError(f"Unknown input_format: {input_format!r} (use 'csv', 'npz', or 'auto')")
+        raise ValueError(f"Unknown input_format: {input_format!r} (use 'csv', 'npz', 'vc7', or 'auto')")
 
     if cutoff:
         csv_files = sorted(
@@ -408,7 +554,7 @@ def Energy_Spectra(U_fluct, V_fluct, dx):
 # --------------------------------------------
 width, height = 200, 150
 cutoff_idx = False
-input_format = 'auto'  # 'csv', 'npz' (previously-exported snap_*.npz), or 'auto' to detect from input_dir
+input_format = 'auto'  # 'csv', 'npz' (previously-exported snap_*.npz), 'vc7' (DaVis .set file or folder of .vc7 files, read via lvpyio), or 'auto' to detect from input_dir
 Auto = True
 Structure = True
 Spectra = True

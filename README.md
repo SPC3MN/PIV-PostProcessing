@@ -26,8 +26,9 @@ Raw PIV data paths are currently hardcoded (e.g. `/Volumes/PIV Data1/...`) at th
 
 ## Input formats
 
-Both `decomposition/Planar_Decomposition.py` and `decomposition/Stereo_Decomposition.py` accept two input formats for `input_dir`, controlled by the `input_format` variable in each script's `# Control` section:
+Both `decomposition/Planar_Decomposition.py` and `decomposition/Stereo_Decomposition.py` accept three input formats for `input_dir`, controlled by the `input_format` variable in each script's `# Control` section:
 
 - `'csv'` — per-snapshot DaVis CSV export (`x [mm]`, `y [mm]`, `Velocity u/v[/w] [m/s]` columns), the original format.
 - `'npz'` — per-snapshot `snap_*.npz` files (`X`, `Y`, `U`, `V`[, `W`] arrays), as produced by this pipeline's own `Save_NPZ` step, or by an external GPU-PIV pipeline that writes matching keys. Loading npz skips the CSV parse/pivot step entirely, so re-running a case from a previously exported `npz_dir` is significantly faster than re-parsing the original CSVs.
-- `'auto'` (default) — detects the format from the files present in `input_dir`: uses `'npz'` if the directory contains `.npz` files and no `.csv` files, otherwise `'csv'`.
+- `'vc7'` — reads DaVis vector data directly via [`lvpyio`](https://www.lavision.de/en/downloads/software/python_add_ons.php), with no CSV export step at all. `input_dir` may point to a `.set` file, or to a directory containing either a `.set` file or a flat folder of `.vc7` snapshots. `lvpyio` ships with the DaVis Python Add-Ons (LaVision download page) rather than PyPI, so it must be installed into the environment separately — the loader raises a clear `ImportError` with instructions if it isn't found. Since `lvpyio`'s exact attribute names can shift slightly between versions, if `_frame_components()` in `decomposition/Planar_Decomposition.py` / `decomposition/Stereo_Decomposition.py` raises against your installed version, inspect `frame.components` / `frame.scales` (or `dir(frame)`) and adjust the lookups there.
+- `'auto'` (default) — detects the format from `input_dir`: `.set`/`.vc7` files (and no `.csv`/`.npz`) select `'vc7'`, `.npz` files (and no `.csv`) select `'npz'`, otherwise `'csv'`. A path directly to a `.set` file always selects `'vc7'`.
