@@ -5,8 +5,9 @@ Python pipeline for processing and analyzing stereo/planar PIV data from a Rando
 ## Structure
 
 ```
+common/          Statistics/IO code shared by both decomposition and analysis
 decomposition/   Reynolds decomposition of raw PIV snapshots into mean + fluctuating fields, calculation and bootstrapping of mean/RMS velocities, structure functions, autocorrelations, and reynolds stresses
-analysis/  Calculation of dissipation rate, integral length, Lumley anisotropy invariants (stereo), homogeneity/isotropy
+analysis/        Calculation of dissipation rate, integral length, Lumley anisotropy invariants (stereo), homogeneity/isotropy
 ```
 
 | File | Purpose |
@@ -15,6 +16,12 @@ analysis/  Calculation of dissipation rate, integral length, Lumley anisotropy i
 | `decomposition/Stereo_Decomposition.py` | Reynolds decomposition for stereo PIV data |
 | `analysis/Planar_Analysis.py` | Post-processing for planar PIV results: calculation of dissipation rate, integral length, homogeneity/isotropy and the respective CIs |
 | `analysis/Stereo_Analysis.py` | Post-processing for stereo PIV results: calculation of dissipation rate, integral length, Lumley anisotropy invariants, homogeneity/isotropy and the respective CIs |
+| `common/discovery.py` | `discover_case_dirs` — finds per-case subfolders under a root directory |
+| `common/io_npz.py` | Loads a case's `snap_*.npz` snapshots, with an optional centered crop |
+| `common/decomposition_stats.py` | Reynolds decomposition, bootstrap CIs, structure functions, autocorrelations, energy spectra — shared by both decomposition scripts |
+| `common/anisotropy.py` | Reynolds stress tensor and Lumley anisotropy invariants (stereo) |
+| `common/analysis_stats.py` | Taylor microscale, homogeneous-region detection, and the integral-length model fit — shared by both analysis scripts |
+| `common/results_io.py` | Writes the collected per-case results to a single Excel workbook |
 
 ## Setup
 
@@ -22,13 +29,34 @@ analysis/  Calculation of dissipation rate, integral length, Lumley anisotropy i
 pip install -r requirements.txt
 ```
 
-Raw PIV data paths are currently hardcoded (e.g. `/Volumes/PIV Data1/...`) at the top of each script under a `# Control` section — update these to match your local data location before running.
+## Data layout
 
-## Input formats
+Decomposition and analysis each point at a **root directory of per-case subfolders** rather than a single hardcoded dataset:
 
-Both `decomposition/Planar_Decomposition.py` and `decomposition/Stereo_Decomposition.py` accept three input formats for `input_dir`, controlled by the `input_format` variable in each script's `# Control` section:
+```
+<raw_root>/                      decomposition INPUT
+  CaseA/  snap_000.npz  snap_001.npz  ...
+  CaseB/  snap_000.npz  ...
 
-- `'csv'` — per-snapshot DaVis CSV export (`x [mm]`, `y [mm]`, `Velocity u/v[/w] [m/s]` columns), the original format.
-- `'npz'` — per-snapshot `snap_*.npz` files (`X`, `Y`, `U`, `V`[, `W`] arrays), as produced by this pipeline's own `Save_NPZ` step, or by an external GPU-PIV pipeline that writes matching keys. Loading npz skips the CSV parse/pivot step entirely, so re-running a case from a previously exported `npz_dir` is significantly faster than re-parsing the original CSVs.
-- `'vc7'` — reads DaVis vector data directly via [`lvpyio`](https://www.lavision.de/en/downloads/software/python_add_ons.php), with no CSV export step at all. `input_dir` may point to a `.set` file, or to a directory containing either a `.set` file or a flat folder of `.vc7` snapshots. `lvpyio` ships with the DaVis Python Add-Ons (LaVision download page) rather than PyPI, so it must be installed into the environment separately — the loader raises a clear `ImportError` with instructions if it isn't found. Since `lvpyio`'s exact attribute names can shift slightly between versions, if `_frame_components()` in `decomposition/Planar_Decomposition.py` / `decomposition/Stereo_Decomposition.py` raises against your installed version, inspect `frame.components` / `frame.scales` (or `dir(frame)`) and adjust the lookups there.
-- `'auto'` (default) — detects the format from `input_dir`: `.set`/`.vc7` files (and no `.csv`/`.npz`) select `'vc7'`, `.npz` files (and no `.csv`) select `'npz'`, otherwise `'csv'`. A path directly to a `.set` file always selects `'vc7'`.
+<processed_root>/                decomposition OUTPUT == analysis INPUT
+  CaseA/
+    Ensemble_Averages/  Averages.npz  Bootstrapped_Statistics.npz
+                         Structure_Function.npz  Autocorrelation_Function.npz
+                         Energy_Spectra.npz  (planar only)
+    Lumley_Statistics/  Lumley_Statistics.npz   (stereo only)
+  CaseB/  ...
+
+<results_path>                   analysis OUTPUT, e.g. results/Planar_Results.xlsx
+```
+
+Each `snap_*.npz` file holds `X`, `Y`, and the velocity components for one snapshot (`U`, `V` for planar; `U`, `V`, `W` for stereo).
+
+Set `raw_root` / `processed_root` (decomposition scripts) or `processed_root` / `results_path` (analysis scripts) at the top of each script's `# Control` section before running. Both stages auto-discover case folders via `common/discovery.py`'s `discover_case_dirs`, so adding a dataset is just adding a subfolder — no script edits needed beyond the root paths. Set `only = "CaseName"` in the `# Control` section to limit a run to a single case, or leave it `None` to process every case folder found.
+
+## Input format
+
+Both `decomposition/Planar_Decomposition.py` and `decomposition/Stereo_Decomposition.py` load snapshots from `snap_*.npz` files (`X`, `Y`, `U`, `V`[, `W`] arrays) via `common/io_npz.py` — as produced by an upstream DaVis/PIV export step or a GPU-PIV pipeline that writes matching keys. There is no CSV or direct DaVis (`.set`/`.vc7`) loader in this repo.
+
+## Results
+
+Each analysis script collects one summary row per case — means, RMS, isotropy, dissipation rate, integral length scales, Taylor microscale, and (stereo) Lumley anisotropy invariants — and, if `save = True` in its `# Control` section, writes the whole batch to a single Excel workbook (`results_path`) via `common/results_io.write_results_xlsx`. The workbook is regenerated from scratch each run, so it always reflects exactly the cases just processed rather than being incrementally appended to.
