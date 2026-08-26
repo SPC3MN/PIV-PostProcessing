@@ -1,7 +1,6 @@
 import os
 import glob
 import numpy as np
-import pandas as pd
 from concurrent.futures import ThreadPoolExecutor
 import time
 import warnings
@@ -10,26 +9,16 @@ import warnings
 warnings.filterwarnings("ignore", message="Mean of empty slice")
 
 
-def load_single(file, top, bottom, left, right):
-    print(f"\r{os.path.basename(file)}", end = "")
-    df = pd.read_csv(file, sep=';', usecols=['x [mm]', 'y [mm]', 'Velocity u [m/s]', 'Velocity v [m/s]'])
-
-    U = df.pivot_table(index='y [mm]', columns='x [mm]', values='Velocity u [m/s]').values
-    V = df.pivot_table(index='y [mm]', columns='x [mm]', values='Velocity v [m/s]').values
-    # print((100 * np.isnan(U[:Ny, :Nx]).sum()) / U[:Ny, :Nx].size, (100 * np.isnan(U[:Ny, :Nx]).sum())/ U[:Ny, :Nx].size)
-    return U[top:bottom, left:right], V[top:bottom, left:right]
-
-
-def load_single_npz(file):
+def load_single_npz(file, top, bottom, left, right):
     print(f"\r{os.path.basename(file)}", end = "")
     with np.load(file) as data:
-        return data['U'], data['V']
+        return data['U'][top:bottom, left:right], data['V'][top:bottom, left:right]
 
 
-def load_dataset_npz(npz_dir, cutoff):
+def load_dataset(npz_dir, cutoff, width_mm, height_mm):
     """Load snapshots previously exported by this pipeline's Save_NPZ step
-    (snap_*.npz files holding X, Y, U, V). Already-trimmed to width_mm/
-    height_mm at export time, so no further cropping is applied here."""
+    (snap_*.npz files holding X, Y, U, V), cropping each to a centered
+    width_mm x height_mm window."""
     npz_files = sorted(
         f for f in glob.glob(os.path.join(npz_dir, '*.npz')) if not os.path.basename(f).startswith('._'))
     if cutoff:
@@ -38,89 +27,48 @@ def load_dataset_npz(npz_dir, cutoff):
     print(f'Loading {len(npz_files)} Files... ')
 
     with np.load(npz_files[0]) as data0:
-        X, Y = data0['X'], data0['Y']
+        X_full, Y_full = data0['X'], data0['Y']
 
-    with ThreadPoolExecutor() as ex:
-        results = list(ex.map(load_single_npz, npz_files))
-
-    U_all, V_all = zip(*results)
-
-    print("\n" + f"Loading done: {round(time.perf_counter() - start, 3)} s" + "\n")
-
-    return X, Y, np.stack(U_all), np.stack(V_all)
-
-
-def load_dataset(csv_dir, cutoff, width_mm, height_mm, input_format='auto'):
-
-    if input_format == 'auto':
-        has_npz = bool(glob.glob(os.path.join(csv_dir, '*.npz')))
-        has_csv = bool(glob.glob(os.path.join(csv_dir, '*.csv')))
-        input_format = 'npz' if has_npz and not has_csv else 'csv'
-
-    if input_format == 'npz':
-        return load_dataset_npz(csv_dir, cutoff)
-    elif input_format != 'csv':
-        raise ValueError(f"Unknown input_format: {input_format!r} (use 'csv', 'npz', or 'auto')")
-
-    if cutoff:
-        csv_files = sorted(
-            f for f in glob.glob(os.path.join(csv_dir, '*.csv')) if not os.path.basename(f).startswith('._'))[:cutoff]
-    else:
-        csv_files = sorted(
-            f for f in glob.glob(os.path.join(csv_dir, '*.csv')) if not os.path.basename(f).startswith('._'))
-
-    print(f'Loading {len(csv_files)} Files... ')
-    df0 = pd.read_csv(csv_files[1], sep=';')
-    U0 = df0.pivot_table(index='y [mm]', columns='x [mm]', values='Velocity u [m/s]')
-
-    Ny0, Nx0 = U0.shape
+    Ny0, Nx0 = X_full.shape
     print(f'Original Size: {(Ny0, Nx0)}')
 
-    # Coordinates (full FOV, untrimmed)
-    x_coords_full = U0.columns.values
-    y_coords_full = U0.index.values
+    x_coords_full = X_full[0]
+    y_coords_full = Y_full[:, 0]
 
-    # Grid spacing
     dx = np.median(np.diff(x_coords_full))
     dy = np.median(np.diff(y_coords_full))
     print(f'dx = {dx:.4f} mm, dy = {dy:.4f} mm')
 
-    # Actual physical center of the FOV (NOT assumed to be 0,0)
     x_center = (x_coords_full.min() + x_coords_full.max()) / 2
     y_center = (y_coords_full.min() + y_coords_full.max()) / 2
     print(f'FOV center: x={x_center:.3f} mm, y={y_center:.3f} mm')
 
-    # Desired number of points to cover width_mm / height_mm
-    Nx = int(round(width_mm / dx))
-    Ny = int(round(height_mm / dy))
+    Nx = int(round(width_mm / abs(dx)))
+    Ny = int(round(height_mm / abs(dy)))
 
-    # Find the index of the coordinate closest to the FOV center
     x_center_idx = np.argmin(np.abs(x_coords_full - x_center))
     y_center_idx = np.argmin(np.abs(y_coords_full - y_center))
 
-    # Build symmetric index window around the center index
     left = x_center_idx - Nx // 2
     right = left + Nx
     top = y_center_idx - Ny // 2
     bottom = top + Ny
 
-    # Clip to valid range (in case desired size exceeds available FOV)
     if left < 0 or top < 0 or right > Nx0 or bottom > Ny0:
         raise ValueError(
             f"Requested frame ({width_mm} x {height_mm} mm) exceeds available FOV "
-            f"({Nx0*dx:.1f} x {Ny0*dy:.1f} mm). "
+            f"({Nx0*abs(dx):.1f} x {Ny0*abs(dy):.1f} mm). "
             f"Computed indices: left={left}, right={right}, top={top}, bottom={bottom}"
         )
 
-    print(f'Trimmed to: {(Ny, Nx)} points -> {Nx*dx:.2f} x {Ny*dy:.2f} mm, '
+    print(f'Trimmed to: {(Ny, Nx)} points -> {Nx*abs(dx):.2f} x {Ny*abs(dy):.2f} mm, '
           f'centered at ({x_center:.2f}, {y_center:.2f}) mm')
 
-    X, Y = np.meshgrid(x_coords_full, y_coords_full)
-    X = X[top:bottom, left:right]
-    Y = Y[top:bottom, left:right]
+    X = X_full[top:bottom, left:right]
+    Y = Y_full[top:bottom, left:right]
 
     with ThreadPoolExecutor() as ex:
-        results = list(ex.map(lambda f: load_single(f, top, bottom, left, right), csv_files))
+        results = list(ex.map(lambda f: load_single_npz(f, top, bottom, left, right), npz_files))
 
     # filter out empty results (any array with shape (0, 0))
     results = [
@@ -406,9 +354,8 @@ def Energy_Spectra(U_fluct, V_fluct, dx):
 # --------------------------------------------
 # Control
 # --------------------------------------------
-width, height = 200, 150
+width, height = 200, 150  # mm, size of the centered crop window applied to each snapshot
 cutoff_idx = False
-input_format = 'auto'  # 'csv', 'npz' (previously-exported snap_*.npz), or 'auto' to detect from input_dir
 Auto = True
 Structure = True
 Spectra = True
@@ -430,7 +377,7 @@ for case in cases:
 
     # ── Load snapshots ─────────────────────────
     start = time.perf_counter()
-    X, Y, U_all, V_all = load_dataset(input_dir, cutoff_idx, width, height, input_format=input_format)
+    X, Y, U_all, V_all = load_dataset(input_dir, cutoff_idx, width, height)
 
     if Save_NPZ:
         print('Saving input as npz...')
