@@ -362,13 +362,13 @@ Spectra = True
 Save_Fluct = False
 Save_NPZ = False
 Bootstrap = True
-cases = []
 
-# case = input("Enter the case name: ")
+input_dir = input("Enter the case directory")
+cases = [input("Enter the case or cases: ")]
 
 for case in cases:
 
-    input_dir = 'input_dir' + case
+    input_dir = input_dir + case
     npz_dir = 'npz_dir' + case + '/Full_npz'
     output_avg_dir = 'output_dir' + case + '/Ensemble_Averages'
     output_fluct_dir = 'output_dir2' + case + '/Fluctuating_npz'
