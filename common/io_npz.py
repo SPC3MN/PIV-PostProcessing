@@ -14,6 +14,7 @@ def _centered_crop_bounds(X_full, Y_full, width_mm, height_mm):
     dx = np.median(np.diff(x_coords_full))
     dy = np.median(np.diff(y_coords_full))
     print(f'dx = {dx:.4f} mm, dy = {dy:.4f} mm')
+    print(f'Full FOV: {(Ny0, Nx0)} points -> {Nx0*abs(dx):.2f} x {Ny0*abs(dy):.2f} mm')
 
     x_center = (x_coords_full.min() + x_coords_full.max()) / 2
     y_center = (y_coords_full.min() + y_coords_full.max()) / 2
@@ -39,6 +40,9 @@ def _centered_crop_bounds(X_full, Y_full, width_mm, height_mm):
 
     print(f'Trimmed to: {(Ny, Nx)} points -> {Nx*abs(dx):.2f} x {Ny*abs(dy):.2f} mm, '
           f'centered at ({x_center:.2f}, {y_center:.2f}) mm')
+    print(f'NOTE: this discards a buffer around the edges of the full FOV -- '
+          f'{left} px left, {Nx0 - right} px right, {top} px top, {Ny0 - bottom} px bottom '
+          f'({left*abs(dx):.1f}/{(Nx0-right)*abs(dx):.1f}/{top*abs(dy):.1f}/{(Ny0-bottom)*abs(dy):.1f} mm) removed')
 
     return top, bottom, left, right
 
