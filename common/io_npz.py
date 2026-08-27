@@ -43,10 +43,23 @@ def _centered_crop_bounds(X_full, Y_full, width_mm, height_mm):
     return top, bottom, left, right
 
 
+def _resolve_key(data, name):
+    """Look up `name` in an open npz archive, tolerating case differences
+    between producers (e.g. PIV_GUI writes lowercase 'x'/'y'/'u'/'v', this
+    pipeline's own exports use uppercase 'X'/'Y'/'U'/'V')."""
+    if name in data.files:
+        return name
+    lower_map = {k.lower(): k for k in data.files}
+    if name.lower() in lower_map:
+        return lower_map[name.lower()]
+    raise KeyError(
+        f"{name!r} not found (case-insensitively) in npz archive; available keys: {sorted(data.files)}")
+
+
 def _load_single(file, components, bounds):
     print(f"\r{os.path.basename(file)}", end="")
     with np.load(file) as data:
-        arrs = [data[c] for c in components]
+        arrs = [data[_resolve_key(data, c)] for c in components]
     if bounds is not None:
         top, bottom, left, right = bounds
         arrs = [a[top:bottom, left:right] for a in arrs]
@@ -54,8 +67,10 @@ def _load_single(file, components, bounds):
 
 
 def load_dataset_npz(npz_dir, cutoff, components=("U", "V"), crop=None):
-    """Load a case's snapshots from its snap_*.npz files (X, Y, plus the
-    requested velocity `components`).
+    """Load a case's snapshots from its *.npz files (X, Y, plus the
+    requested velocity `components`). Key lookup is case-insensitive, so
+    files from producers using different casing (e.g. PIV_GUI's lowercase
+    'x'/'y'/'u'/'v') load the same as this pipeline's own uppercase exports.
 
     `crop`, if given, is a (width_mm, height_mm) tuple: each snapshot is
     cropped to a centered window of that size before stacking. Leave it None
@@ -69,7 +84,7 @@ def load_dataset_npz(npz_dir, cutoff, components=("U", "V"), crop=None):
     print(f'Loading {len(npz_files)} Files... ')
 
     with np.load(npz_files[0]) as data0:
-        X_full, Y_full = data0['X'], data0['Y']
+        X_full, Y_full = data0[_resolve_key(data0, 'X')], data0[_resolve_key(data0, 'Y')]
 
     if crop is not None:
         width_mm, height_mm = crop
