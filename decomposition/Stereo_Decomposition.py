@@ -7,6 +7,7 @@ import numpy as np
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from common.discovery import discover_case_dirs_or_root
 from common.io_npz import load_dataset_npz
+from common.prompts import ask_yes_no, ask_float, ask_int, ask_text
 from common.decomposition_stats import (
     reynolds_decomp_stereo,
     boot_ci,
@@ -20,22 +21,33 @@ warnings.filterwarnings("ignore", message="Mean of empty slice")
 # --------------------------------------------
 # Control
 # --------------------------------------------
-processed_root = r"/path/to/processed"  # decomposition output root; analysis reads from here
-only = None                             # limit to one case name, or None to process every case found
-
-width, height = 200, 150  # mm, size of the centered crop window applied to each snapshot
-cutoff_idx = False  # False if none
-Auto = True
-Structure = True
-Save_Fluct = False
-Save_NPZ = False
-Save_Lumley = True
-Bootstrap = True
-
 raw_root = input(
     "Enter the npz snapshot directory (a single case folder of snap_*.npz "
     "files, or a parent folder containing multiple case subfolders): "
 ).strip()
+
+processed_root = ask_text("Enter the output directory for decomposition results")
+if not processed_root:
+    raise ValueError("An output directory is required.")
+
+only = ask_text("Limit to one case name (blank = process every case found)")
+
+n = ask_int("Limit snapshots per case (blank = no limit)")
+cutoff_idx = n if n else False
+
+if ask_yes_no("Crop each snapshot to a custom size before processing?", default=False):
+    width = ask_float("  Crop width (mm)")
+    height = ask_float("  Crop height (mm)")
+    crop = (width, height)
+else:
+    crop = None
+
+Auto = ask_yes_no("Calculate spatial autocorrelation?", default=True)
+Structure = ask_yes_no("Calculate the structure function?", default=True)
+Save_Lumley = ask_yes_no("Calculate Lumley anisotropy statistics?", default=True)
+Bootstrap = ask_yes_no("Compute bootstrap confidence intervals?", default=True)
+Save_Fluct = ask_yes_no("Save fluctuating velocity snapshots?", default=False)
+Save_NPZ = ask_yes_no("Re-save input snapshots into the output npz folder?", default=False)
 
 case_dirs = discover_case_dirs_or_root(raw_root, required_glob="*.npz")
 if not case_dirs:
@@ -57,7 +69,7 @@ for case_name, input_dir in case_dirs.items():
 
     # ── Load snapshots ─────────────────────────
     X, Y, U_all, V_all, W_all = load_dataset_npz(
-        input_dir, cutoff_idx, components=("U", "V", "W"), crop=(width, height))
+        input_dir, cutoff_idx, components=("U", "V", "W"), crop=crop)
 
     dr = (X[0, 1] - X[0, 0]) / 10
 
