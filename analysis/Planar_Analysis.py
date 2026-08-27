@@ -4,7 +4,6 @@ import warnings
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.ndimage import gaussian_filter
-from matplotlib.patches import Rectangle
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from common.discovery import discover_case_dirs
@@ -129,27 +128,6 @@ for case_name, case_dir in case_dirs.items():
         fig, ax = plt.subplots()
 
         ax.contourf(X, Y, gaussian_filter(TKE, 3), cmap='viridis', levels=10)
-
-        # n = Homogenous_Rect(gaussian_filter(TKE, 3))
-        # X_trim = X[n:-n, 2*n:-2*n]
-        # Y_trim = Y[n:-n, 2*n:-2*n]
-        #
-        # x0 = X_trim[0, 0]
-        # y0 = Y_trim[0, 0]
-        #
-        # width  = X_trim[0, -1] - X_trim[0, 0]
-        # height = Y_trim[-1, 0] - Y_trim[0, 0]
-        #
-        # rect = Rectangle(
-        #     (x0, y0),
-        #     width,
-        #     height,
-        #     edgecolor='red',
-        #     facecolor='none',
-        #     linewidth=2
-        # )
-        #
-        # ax.add_patch(rect)
         plt.show()
 
     # ── Structure function plot ───────────

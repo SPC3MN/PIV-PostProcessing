@@ -4,11 +4,10 @@ import warnings
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.ndimage import gaussian_filter
-from matplotlib.patches import Rectangle
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from common.discovery import discover_case_dirs
-from common.analysis_stats import Mask_Region, taylor_microscale, Homogenous_Rect, fit_integral_length
+from common.analysis_stats import Mask_Region, taylor_microscale, fit_integral_length
 from common.results_io import write_results_xlsx
 
 warnings.filterwarnings("ignore", message="divide by zero encountered in divide")
@@ -16,21 +15,6 @@ warnings.filterwarnings("ignore", message="divide by zero encountered in log")
 warnings.filterwarnings("ignore", message="invalid value encountered in power")
 warnings.filterwarnings("ignore", message="invalid value encountered in divide")
 warnings.filterwarnings("ignore", message="Polyfit may be poorly conditioned")
-
-
-def Center_2dArray(X, Y, U, width=300, height=150):
-    x_center = X[0, :].mean()
-    y_center = Y[:, 0].mean()
-
-    xmask = np.abs(X[0, :] - x_center) <= width / 2
-    ymask = np.abs(Y[:, 0] - y_center) <= height / 2
-
-    idx = np.ix_(ymask, xmask)
-
-    X_c = X[idx] - x_center
-    Y_c = Y[idx] - y_center
-
-    return X_c, Y_c, U[idx]
 
 
 # --------------------------------------------
@@ -133,30 +117,7 @@ for case_name, case_dir in case_dirs.items():
 
     fig, ax = plt.subplots()
 
-    X, Y, TKE = Center_2dArray(X, Y, TKE)
-
     ax.contourf(X, Y, gaussian_filter(TKE, 3), cmap='viridis', levels=10)
-
-    n = Homogenous_Rect(gaussian_filter(TKE, 5), sigma=5, verbose=True)
-    X_trim = X[n:-n, 2*n:-2*n]
-    Y_trim = Y[n:-n, 2*n:-2*n]
-
-    x0 = X_trim[0, 0]
-    y0 = Y_trim[0, 0]
-
-    width = X_trim[0, -1] - X_trim[0, 0]
-    height = Y_trim[-1, 0] - Y_trim[0, 0]
-
-    rect = Rectangle(
-        (x0, y0),
-        width,
-        height,
-        edgecolor='red',
-        facecolor='none',
-        linewidth=2
-    )
-
-    ax.add_patch(rect)
     plt.show()
 
     # ── Structure function plot ───────────

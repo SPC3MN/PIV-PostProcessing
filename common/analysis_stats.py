@@ -51,22 +51,43 @@ def Mask_Region(mask):
     return max_start, max_end
 
 
-def Homogenous_Rect(TKE_field, thresh=0.05, sigma=5, verbose=False):
-    TKE_field = gaussian_filter(TKE_field, sigma)
-    Ny, Nx = TKE_field.shape
-    mean = np.nanmean(TKE_field)
-    std = np.nanstd(TKE_field)
-    n = 0
+def inertial_range_mask(D, r, slope_lo, slope_hi, smooth_sigma=None, drop_zero_lag=False):
+    """Find the (start, end) index window over which the structure function
+    D(r) follows a power-law slope in [slope_lo, slope_hi] on a log-log plot
+    -- the "inertial range" used to anchor both the dissipation-rate estimate
+    and the integral-length curve fit.
 
-    while std/mean >= thresh:
-        if verbose:
-            print(std / mean)
-        n += 1
-        TKE = TKE_field[n:Ny-n, 2*n:Nx-2*n]
-        mean = np.nanmean(TKE)
-        std = np.nanstd(TKE)
+    `smooth_sigma`/`drop_zero_lag` intentionally default to the plain,
+    unsmoothed calculation: Planar_Analysis.py drops the r=0 lag before
+    taking the log/gradient and uses no smoothing, while Stereo_Analysis.py
+    smooths log(D) with a gaussian_filter first and keeps the r=0 lag in
+    (its log is -inf, which numpy's gradient/comparisons quietly propagate as
+    NaN/False without raising, matching this pipeline's existing behavior).
+    Pass the two scripts' own values here rather than a shared default.
 
-    return n
+    Returns (max_start, max_end) from Mask_Region -- indices into whichever
+    array (r[1:] if drop_zero_lag else r) the slope was computed against.
+    """
+    if drop_zero_lag:
+        log_D = np.log(D[1:])
+        log_r = np.log(r[1:])
+    else:
+        log_D = np.log(D)
+        log_r = np.log(r)
+
+    if smooth_sigma:
+        log_D = gaussian_filter(log_D, smooth_sigma)
+
+    slope = np.gradient(log_D, log_r)
+    mask = (slope > slope_lo) & (slope < slope_hi)
+    return Mask_Region(mask)
+
+
+def dissipation_rate_array(D, r, C2=2):
+    """Compensated structure function: eps(r) = ((D(r)/C2)^1.5) / r, the
+    per-lag dissipation-rate estimate averaged over the inertial-range window
+    (from `inertial_range_mask`) to get a single eps value."""
+    return (D / C2) ** 1.5 / r
 
 
 def autocorrelation_model(r, q, Lm):
