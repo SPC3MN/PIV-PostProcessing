@@ -5,7 +5,7 @@ import warnings
 import numpy as np
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-from common.discovery import discover_case_dirs
+from common.discovery import discover_case_dirs_or_root
 from common.io_npz import load_dataset_npz
 from common.decomposition_stats import (
     reynolds_decomp_stereo,
@@ -20,7 +20,6 @@ warnings.filterwarnings("ignore", message="Mean of empty slice")
 # --------------------------------------------
 # Control
 # --------------------------------------------
-raw_root = r"/path/to/raw_npz"          # folder of per-case subfolders of snap_*.npz (decomposition input)
 processed_root = r"/path/to/processed"  # decomposition output root; analysis reads from here
 only = None                             # limit to one case name, or None to process every case found
 
@@ -33,11 +32,19 @@ Save_NPZ = False
 Save_Lumley = True
 Bootstrap = True
 
-case_dirs = discover_case_dirs(raw_root, required_glob="*.npz")
+raw_root = input(
+    "Enter the npz snapshot directory (a single case folder of snap_*.npz "
+    "files, or a parent folder containing multiple case subfolders): "
+).strip()
+
+case_dirs = discover_case_dirs_or_root(raw_root, required_glob="*.npz")
+if not case_dirs:
+    raise FileNotFoundError(
+        f"No snap_*.npz files found directly in {raw_root!r} or in its immediate subfolders.")
 if only:
     case_dirs = {only: case_dirs[only]}
 
-print(f"Found {len(case_dirs)} case(s).")
+print(f"Found {len(case_dirs)} case(s): {', '.join(case_dirs)}")
 
 for case_name, input_dir in case_dirs.items():
     print(f"\n===== {case_name} =====")

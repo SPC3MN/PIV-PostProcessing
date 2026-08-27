@@ -20,3 +20,14 @@ def discover_case_dirs(root, required_glob):
         if glob.glob(os.path.join(case_dir, required_glob)):
             cases[entry] = case_dir
     return cases
+
+
+def discover_case_dirs_or_root(root, required_glob):
+    """Like discover_case_dirs, but also accepts being pointed directly at a
+    single case folder: if `root` itself contains files matching
+    `required_glob`, it's returned alone as one case (named after its own
+    directory) instead of being scanned for subfolders. Lets a caller accept
+    either one bare snapshot folder or a parent of many case folders."""
+    if glob.glob(os.path.join(root, required_glob)):
+        return {os.path.basename(os.path.normpath(root)): root}
+    return discover_case_dirs(root, required_glob)
