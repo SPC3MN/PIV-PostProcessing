@@ -1,6 +1,6 @@
-# PIV Turbulence Pipeline
+# PIV Post-Processing Suite
 
-Python pipeline for processing and analyzing stereo/planar PIV data from a Random Jet Array (RJA) facility generating homogeneous isotropic turbulence (HIT).
+Python pipeline for post-processing stereo/planar PIV data: Reynolds decomposition of raw snapshots followed by turbulence statistics (dissipation rate, integral length, Taylor microscale, anisotropy, homogeneity/isotropy).
 
 ## Structure
 
@@ -22,8 +22,6 @@ analysis/        Calculation of dissipation rate, integral length, Lumley anisot
 | `common/anisotropy.py` | Reynolds stress tensor and Lumley anisotropy invariants (stereo) |
 | `common/analysis_stats.py` | Taylor microscale, homogeneous-region detection, and the integral-length model fit — shared by both analysis scripts |
 | `common/results_io.py` | Writes the collected per-case results to a single Excel workbook |
-
-`analysis/` and `decomposition/` also contain a few pre-restructure scripts (`analysis/Anisotropy_Invariants.py`, `analysis/Bayesian_Bootstrap.py`, `analysis/Statistics_Plotting.py`, `decomposition/Test_Decomposition.py`) that predate `common/` and are not part of the maintained pipeline above — they're kept for reference but read their own ad hoc CSV/glob inputs rather than the `snap_*.npz` / `common.io_npz` convention.
 
 ## Setup
 
